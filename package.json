@@ -1,0 +1,47 @@
+{
+  "name": "dsh-private-chat-prototype",
+  "version": "0.1.7",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.0-rc.2 <0.3.0 || >=0.2.2-rc.3 <0.2.2"
+  },
+  "scripts": {
+    "test": "node --test checks/offline.js"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "bundleDependencies": ["jose"],
+  "description": "dsh-DeepChat · Encrypted chat and material sharing for DeepSeek Harness",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./src/browser.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "SECURITY.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  }
+}

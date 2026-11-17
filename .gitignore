@@ -1,0 +1,9 @@
+node_modules/
+.state/
+.release/
+.env
+.env.*
+identity.json
+*.sqlite
+*.sqlite-*
+*.tgz
