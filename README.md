@@ -8,6 +8,7 @@ DeepSeek Harness 加密聊天与材料分享插件 · Encrypted chat and file sh
 | --- | --- |
 | 安装包 / Plugin package | [dsh-DeepChat-0.0.1.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.1/dsh-DeepChat-0.0.1.tgz) |
 | 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.1/SHA256SUMS) |
+| 源码 / Source code | [v0.0.1 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.0.1.zip) |
 
 ## 中文
 
