@@ -1,6 +1,6 @@
 {
   "name": "dsh-private-chat-prototype",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -11,10 +11,12 @@
     "test": "node --test checks/offline.js"
   },
   "dependencies": {
-    "jose": "6.2.12"
+    "jose": "6.2.12",
+    "qrcode-generator": "2.0.4"
   },
   "bundleDependencies": [
-    "jose"
+    "jose",
+    "qrcode-generator"
   ],
   "description": "dsh-DeepChat: encrypted chat, file sharing and AI conversations for DeepSeek Harness / DSH 加密聊天与材料分享插件",
   "exports": {
@@ -25,7 +27,9 @@
   "files": [
     "src",
     "cordis.patch.yml",
-    "SECURITY.md"
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "dsh": {
     "bundle": {

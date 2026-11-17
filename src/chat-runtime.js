@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { initializeDevice, openDevice } from './client.js'
 import { relayOrigin, relaySettings, testRelay } from './relay-settings.js'
+import { startLocalRelay } from './relay-server.js'
 
 export function chatRuntime({ directory, deviceOptions, pollMs }) {
   const settings = relaySettings(directory, deviceOptions.relay)
@@ -11,6 +12,9 @@ export function chatRuntime({ directory, deviceOptions, pollMs }) {
   let generation = 0
   let connection = null
   let runningSync
+  let localRelay
+  let startingLocal
+  let stopped = false
   let queue = Promise.resolve()
   const changed = () => { generation++ }
 
@@ -31,11 +35,44 @@ export function chatRuntime({ directory, deviceOptions, pollMs }) {
 
   function setConnection(origin, status) {
     connection = { origin, status, lastSyncAt: status === 'connected' ? Date.now() : connection?.origin === origin ? connection.lastSyncAt : null }
+    changed()
   }
 
   function relaySummary(current) {
     const observed = connection?.origin === current.origin ? connection : null
-    return { ...current, status: observed?.status ?? 'unknown', lastSyncAt: observed?.lastSyncAt ?? null }
+    return { ...current, status: observed?.status ?? 'unknown', lastSyncAt: observed?.lastSyncAt ?? null,
+      localRunning: !!localRelay, localEnabled: settings.localEnabled() }
+  }
+
+  async function ensureLocal() {
+    if (localRelay) return localRelay
+    if (!startingLocal) {
+      startingLocal = startLocalRelay(join(directory, 'local-relay'), deviceOptions.localPort ?? 8611)
+        .then(async relay => {
+          if (stopped) {
+            await relay.close()
+            throw new Error('应用正在退出，请重新打开后连接')
+          }
+          localRelay = relay
+          changed()
+          return relay
+        }).finally(() => { startingLocal = undefined })
+    }
+    return startingLocal
+  }
+
+  async function register(value) {
+    const previous = settings.get()
+    const origin = value === undefined ? previous.origin : relayOrigin(value)
+    await testRelay(origin, deviceOptions.request)
+    if (!hasIdentity()) await initializeDevice(directory)
+    const invite = await withDevice(async device => {
+      await device.register()
+      return device.invitation()
+    }, origin, previous.origin)
+    settings.activate(origin)
+    setConnection(origin, 'connected')
+    return { ...invite, relay: relaySummary({ origin, registered: true }) }
   }
 
   function sync() {
@@ -67,13 +104,21 @@ export function chatRuntime({ directory, deviceOptions, pollMs }) {
   return {
     touch: changed,
     start() {
+      stopped = false
       function tick() {
         if (hasIdentity()) void sync().catch(() => {})
       }
       const timer = setInterval(tick, pollMs)
       timer.unref()
-      tick()
-      return () => clearInterval(timer)
+      if (settings.localEnabled()) void ensureLocal().then(tick, tick)
+      else tick()
+      return () => {
+        stopped = true
+        clearInterval(timer)
+        const closing = localRelay?.close()
+        localRelay = undefined
+        return closing
+      }
     },
     read(action) {
       return withDevice(action, settings.get().origin)
@@ -107,21 +152,34 @@ export function chatRuntime({ directory, deviceOptions, pollMs }) {
       await testRelay(origin, deviceOptions.request)
       return { origin, reachable: true }
     },
-    async register(value) {
+    startLocal() {
       return schedule(async () => {
-        const previous = settings.get()
-        const origin = value === undefined ? previous.origin : relayOrigin(value)
-        await testRelay(origin, deviceOptions.request)
-        if (!hasIdentity()) await initializeDevice(directory)
-        const invite = await withDevice(async device => {
-          await device.register()
-          return device.invitation()
-        }, origin, previous.origin)
-        settings.activate(origin)
-        setConnection(origin, 'connected')
-        changed()
-        return { ...invite, relay: relaySummary({ origin, registered: true }) }
+        let relay
+        try {
+          relay = await ensureLocal()
+        } catch (error) {
+          if (error.code === 'EADDRINUSE') throw new Error('本机端口已占用，请填写已有服务地址并测试连接')
+          throw error
+        }
+        const result = await register(relay.origin)
+        settings.enableLocal()
+        return result
       })
+    },
+    stopLocal() {
+      return schedule(async () => {
+        settings.disableLocal()
+        await startingLocal?.catch(() => {})
+        const origin = localRelay?.origin
+        await localRelay?.close()
+        localRelay = undefined
+        if (origin === settings.get().origin) setConnection(origin, 'disconnected')
+        changed()
+        return { stopped: true }
+      })
+    },
+    register(value) {
+      return schedule(() => register(value))
     },
     sync
   }

@@ -52,6 +52,7 @@ export function relaySettings(directory, fallback) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS active_relay (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS registered_relays (origin TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS local_relay (id INTEGER PRIMARY KEY CHECK (id = 1));
       `)
       return work(db)
     } finally {
@@ -60,6 +61,15 @@ export function relaySettings(directory, fallback) {
   }
 
   return {
+    localEnabled() {
+      return withSettings(db => !!db.prepare('SELECT 1 FROM local_relay WHERE id = 1').get())
+    },
+    enableLocal() {
+      withSettings(db => db.prepare('INSERT OR IGNORE INTO local_relay VALUES (1)').run())
+    },
+    disableLocal() {
+      withSettings(db => db.prepare('DELETE FROM local_relay').run())
+    },
     get() {
       return withSettings(db => {
         const profile = db.prepare('SELECT origin FROM active_relay WHERE id = 1').get()

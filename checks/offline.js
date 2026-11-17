@@ -9,6 +9,8 @@ import { maxFileBytes } from '../src/bundle.js'
 import { createHandler } from '../src/host.js'
 import { createIdentity, hash, maxTextBytes, newPayload, readInvitation, retentionMs, seal } from '../src/protocol.js'
 import { openRelay } from '../src/relay.js'
+import { readSharedInvitation, shareInvitation } from '../src/invitation-share.js'
+import { startLocalRelay } from '../src/relay-server.js'
 
 async function setup(t, { paired = true } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-chat-test-'))
@@ -446,4 +448,111 @@ test('selecting chat context includes only selected messages and opt-in file byt
   assert.deepEqual((await lab.alice.selectedContext('bob', [material.id], true)).files, [{ name: 'chosen.txt', data: file.toString('base64url') }])
   await assert.rejects(lab.alice.selectedContext('carol', [skipped.id], true), /不属于/)
   await assert.rejects(lab.alice.selectedContext('bob', [selected.id, selected.id], false), /请选择/)
+})
+
+test('invitation links round-trip without private keys and reject changed origins and missing fingerprint approval', async t => {
+  const lab = await setup(t, { paired: false })
+  const invite = lab.bob.invitation()
+  const shared = shareInvitation(invite, 'https://relay.example.test')
+  const parsed = await readSharedInvitation(shared.link)
+  assert.deepEqual(parsed, { code: invite.code, fingerprint: invite.fingerprint, relay: 'https://relay.example.test' })
+  assert.equal((await readSharedInvitation(invite.code)).relay, null)
+  assert.match(shared.qr, /^data:image\/gif;base64,/)
+  const payload = JSON.parse(Buffer.from(new URL(shared.link).hash.slice(10), 'base64url').toString('utf8'))
+  assert.deepEqual(Object.keys(payload).sort(), ['code', 'relay', 'v'])
+  await assert.rejects(readSharedInvitation(shared.link.replace('github.com', 'example.test')), /无效/)
+  await assert.rejects(readSharedInvitation(shared.link + '&tracking=1'), /无效/)
+  const invalid = new URL(shared.link)
+  invalid.hash = 'deepchat=' + Buffer.from(JSON.stringify({ ...payload, relay: 'http://public.example.test' })).toString('base64url')
+  await assert.rejects(readSharedInvitation(invalid.href), /无效/)
+
+  const handler = createHandler({ directory: join(lab.root, 'alice'), deviceOptions: { request: lab.request } })
+  const requestFriend = code => handler(new Request('http://127.0.0.1/api/private-chat/submit', {
+    method: 'POST', headers: { 'x-dsh-private-chat': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'request-friend', alias: 'bob', code, fingerprint: invite.fingerprint })
+  }))
+  const mismatched = await requestFriend(shared.link)
+  assert.equal(mismatched.status, 400)
+  assert.match((await mismatched.json()).error, /先连接/)
+  assert.equal((await requestFriend(shareInvitation(invite, 'http://127.0.0.1:8611').link)).status, 200)
+  await assert.rejects(lab.bob.requestFriend('alice', lab.alice.invitation().code, 'wrong'), /fingerprint/)
+})
+
+test('first-run local relay registers once, delivers a friend request and messages, then restarts with the same identity', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-chat-onboarding-'))
+  const options = { localPort: 0 }
+  let stop
+  let bob
+  t.after(async () => {
+    await stop?.()
+    bob?.close()
+    await rm(root, { recursive: true, force: true })
+  })
+  let handler = createHandler({ directory: join(root, 'alice'), deviceOptions: options, pollMs: 15 })
+  stop = handler.start()
+  const call = async (action, input) => {
+    const response = await handler(new Request('http://127.0.0.1/api/private-chat' + (input ? '/submit' : '?action=' + action), {
+      method: input ? 'POST' : 'GET',
+      headers: { 'x-dsh-private-chat': '1', 'content-type': 'application/json' },
+      body: input && JSON.stringify({ action, ...input })
+    }))
+    const result = await response.json()
+    assert.equal(response.status, 200, JSON.stringify(result))
+    return result
+  }
+  assert.equal((await call('overview')).ready, false)
+  const [registered, repeated] = await Promise.all([call('start-local-relay', {}), call('start-local-relay', {})])
+  assert.equal(registered.code, repeated.code)
+  assert.equal(registered.relay.localRunning, true)
+  options.localPort = Number(new URL(registered.relay.origin).port)
+  await initializeDevice(join(root, 'bob'))
+  bob = openDevice(join(root, 'bob'), { relay: registered.relay.origin })
+  await bob.register()
+  const aliceInvite = await call('share-invite', {})
+  assert.equal((await call('read-invite', { value: aliceInvite.link })).code, registered.code)
+  await bob.requestFriend('alice', aliceInvite.code, aliceInvite.fingerprint)
+  await call('sync', {})
+  const incoming = (await call('state')).requests.find(request => request.direction === 'in')
+  await call('decide-friend', { id: incoming.id, decision: 'accepted', alias: 'bob', fingerprint: incoming.fingerprint })
+  await bob.sync()
+  assert.equal((await call('send', { alias: 'bob', text: '本机试用首条消息' })).status, 'stored')
+  await bob.sync()
+  assert.equal((await bob.history()).at(-1).text, '本机试用首条消息')
+  await call('sync', {})
+  await stop()
+  handler = createHandler({ directory: join(root, 'alice'), deviceOptions: options, pollMs: 15 })
+  stop = handler.start()
+  for (let attempt = 0; attempt < 40 && !(await call('overview')).relay.localRunning; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.equal((await call('overview')).relay.localRunning, true)
+  assert.equal((await call('share-invite', {})).code, registered.code)
+  await bob.send('alice', '重启后收到的消息')
+  await call('sync', {})
+  assert.equal((await call('state')).conversations[0].preview, '重启后收到的消息')
+  assert.equal((await call('stop-local-relay', {})).stopped, true)
+  assert.equal((await call('overview')).relay.localRunning, false)
+  assert.equal((await call('overview')).relay.localEnabled, false)
+  await stop()
+  handler = createHandler({ directory: join(root, 'alice'), deviceOptions: options, pollMs: 15 })
+  stop = handler.start()
+  assert.equal((await call('overview')).relay.localRunning, false)
+})
+
+test('local relay port conflicts keep the existing relay and device settings intact', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-chat-conflict-'))
+  const occupied = await startLocalRelay(join(root, 'existing'), 0)
+  const handler = createHandler({ directory: join(root, 'new-device'),
+    deviceOptions: { localPort: Number(new URL(occupied.origin).port) } })
+  t.after(async () => { await occupied.close(); await rm(root, { recursive: true, force: true }) })
+  const response = await handler(new Request('http://127.0.0.1/api/private-chat/submit', {
+    method: 'POST', headers: { 'x-dsh-private-chat': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'start-local-relay' })
+  }))
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /端口已占用/)
+  const overview = await handler(new Request('http://127.0.0.1/api/private-chat?action=overview',
+    { headers: { 'x-dsh-private-chat': '1' } }))
+  assert.equal((await overview.json()).ready, false)
+  assert.equal((await fetch(occupied.origin + '/v1/mailboxes/' + '0'.repeat(64))).status, 401)
 })

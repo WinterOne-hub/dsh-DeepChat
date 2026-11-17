@@ -5,6 +5,7 @@ import { maxFileBytes } from './bundle.js'
 import { chatProfile } from './chat-profile.js'
 import { chatRuntime } from './chat-runtime.js'
 import { validText } from './protocol.js'
+import { readSharedInvitation, shareInvitation } from './invitation-share.js'
 
 export const name = 'dsh-private-chat'
 export const inject = ['connection', 'sessionQuery']
@@ -136,8 +137,21 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
         case 'share-context': return json(await chat.read(device => device.selectedContext(body.alias, body.ids, body.includeFiles)))
         case 'test-relay': return json(await chat.test(body.origin))
         case 'register': return json(await chat.register(body.origin))
+        case 'start-local-relay': return json(await chat.startLocal())
+        case 'stop-local-relay': return json(await chat.stopLocal())
+        case 'read-invite': return json(await readSharedInvitation(body.value))
+        case 'share-invite': {
+          const overview = await chat.overview()
+          if (!overview.relay.registered) throw new Error('请先连接并注册投递服务')
+          return json(shareInvitation(await chat.read(device => device.invitation()), overview.relay.origin))
+        }
         case 'invite': return json(await chat.read(device => device.invitation()))
-        case 'request-friend': return json(await chat.mutate(device => device.requestFriend(body.alias, body.code, body.fingerprint)))
+        case 'request-friend': {
+          const invite = await readSharedInvitation(body.code)
+          const overview = await chat.overview()
+          if (invite.relay && invite.relay !== overview.relay.origin) throw new Error('请先连接邀请中的投递服务，再发送好友申请')
+          return json(await chat.mutate(device => device.requestFriend(body.alias, invite.code, body.fingerprint)))
+        }
         case 'decide-friend': return json(await chat.mutate(device => device.decideFriend(body.id, body.decision, body.alias, body.fingerprint)))
         case 'send': return json(await chat.mutate(device => device.send(body.alias, body.text)))
         case 'send-bundle': return json(await chat.mutate(device => device.sendBundle(body.alias, body)))
@@ -149,7 +163,7 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
         default: return json({ error: '未知操作' }, 404)
       }
     } catch (error) {
-      const detail = typeof error.message === 'string' && /^[\p{L}\p{N} ().:-]{1,120}$/u.test(error.message)
+      const detail = typeof error.message === 'string' && /^[\p{L}\p{N} ().:，、-]{1,120}$/u.test(error.message)
         ? error.message : '请检查本机存储或投递服务后重试'
       return json({ error: detail }, 400)
     }

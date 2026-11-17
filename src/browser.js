@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const { cloneElement, createElement: h, useEffect, useRef, useState } = require('react')
     const panel = 'dsh-private-chat'
     const displayName = 'dsh-DeepChat'
-    const statusLabels = { received: '已接收', delivered: '对方设备已接收', stored: '服务已暂存', queued: '待发送',
+    const statusLabels = { received: '已接收', delivered: '对方设备已接收', stored: '已发送，等待对方设备', queued: '待发送，将自动重试',
       'expired-unconfirmed': '已过期，未确认送达' }
     const requestLabels = { pending: '等待对方确认', accepted: '已成为好友', rejected: '已拒绝', expired: '已过期' }
     const timeLabel = time => new Date(time).toLocaleString(undefined, {
@@ -71,6 +71,7 @@ window.__ModuleLoader__.load({
       .private-chat .material strong, .private-chat .material small { display:block; }
       .private-chat .material .rows { padding-top: 8px; }
       .private-chat .context-actions { background: var(--selected); border-radius: 8px; padding: 8px; }
+      .private-chat .invite-qr { width: min(100%, 264px); height: auto; image-rendering: pixelated; background: white; }
       .private-chat .security-code { overflow-wrap: anywhere; user-select: all; }
       .private-chat .material-preview { max-height: 200px; overflow: auto; }
       .private-chat output, .private-chat p, .private-chat strong, .private-chat small { overflow-wrap: anywhere; }
@@ -257,32 +258,53 @@ window.__ModuleLoader__.load({
           button('拒绝申请', () => decide(request.id, 'rejected'))))
     }
 
-    function RelayPanel({ relay, run, locked, onRegister }) {
-      const [draft, setDraft] = useState(relay?.origin ?? '')
-      useEffect(() => setDraft(relay?.origin ?? ''), [relay?.origin])
+    async function copyText(value) {
+      try {
+        await navigator.clipboard.writeText(value)
+      } catch {
+        throw new Error('复制失败，请选中文本后手动复制')
+      }
+    }
+
+    function RelayPanel({ relay, run, locked, onRegister, suggestedOrigin }) {
+      const [draft, setDraft] = useState(suggestedOrigin || relay?.origin || '')
+      useEffect(() => setDraft(suggestedOrigin || relay?.origin || ''), [relay?.origin, suggestedOrigin])
+      async function connect(action, input) {
+        const result = await api(action, { input })
+        onRegister(result)
+        return '设备已连接，可以交换邀请并添加好友'
+      }
       return h('section', { className: 'card', 'aria-label': '投递服务设置' },
-        h('h2', null, '投递服务设置'),
+        h('h2', null, relay?.registered ? '投递服务设置' : '连接聊天服务'),
+        !relay?.registered && h('p', null, '两端连接同一个服务后，才可以交换消息。'),
+        h('div', { className: 'rows' },
+          button(relay?.localRunning ? '本机服务已启动' : '一键开始本机试用',
+            () => run(() => connect('start-local-relay', {})), locked || relay?.localRunning, true),
+          relay?.localEnabled && button('停止本机服务', () => run(async () => {
+            await api('stop-local-relay', { input: {} })
+            return '本机服务已停止，重新打开 DSH 后也会保持关闭'
+          }), locked),
+          h('small', { className: 'muted' }, '本机试用只供同一台电脑上的设备使用。已启用的本机服务会随 DSH 启动和退出。')),
         label('投递服务地址', h('input', { type: 'url', value: draft, disabled: locked,
           placeholder: 'https://relay.example.com', onChange: event => setDraft(event.target.value) })),
-        h('small', null, relay?.registered ? `设备已注册 · ${relay.origin}` : '连接后注册本机设备，好友需要连接同一个投递服务。'),
+        h('small', null, '跨电脑聊天，请填写双方共用的私有 HTTPS 地址。'),
         h('div', { className: 'row' },
           button('测试连接', () => run(async () => {
             await api('test-relay', { input: { origin: draft.trim() } })
-            return '投递服务连接正常'
+            return '服务可访问，点击保存并注册后使用'
           }), locked || !draft.trim()),
-          button('保存并注册', () => run(async () => {
-            const result = await api('register', { input: { origin: draft.trim() } })
-            onRegister(result)
-            return '已保存投递服务并登记本机设备'
-          }), locked || !draft.trim(), true)))
+          button('保存并注册', () => run(() => connect('register', { origin: draft.trim() })), locked || !draft.trim(), true)))
     }
 
-    function FriendsPanel({ invite, setInvite, requests, locked, run }) {
+    function FriendsPanel({ invite, setInvite, requests, locked, run, relay, ready, onRelay }) {
       const [alias, setAlias] = useState('')
       const [code, setCode] = useState('')
       const [fingerprint, setFingerprint] = useState('')
+      const [preview, setPreview] = useState(null)
+      const [verified, setVerified] = useState(false)
       const incoming = requests.filter(item => item.direction === 'in' && item.status === 'pending')
       const outgoing = requests.filter(item => item.direction === 'out')
+      const differentRelay = preview?.relay && preview.relay !== relay.origin
 
       function decide(id, decision, alias, fingerprint) {
         return run(async () => {
@@ -291,24 +313,54 @@ window.__ModuleLoader__.load({
         })
       }
 
-      return h('section', { className: 'card', 'aria-label': '好友' }, h('h2', null, '好友'),
-        button('显示我的邀请', () => run(async () => setInvite(await api('invite', { input: {} }))), locked),
-        invite && h('div', { className: 'rows' },
-          label('我的邀请', h('textarea', { readOnly: true, rows: 2, value: invite.code })),
-          label('设备指纹', h('input', { readOnly: true, value: invite.fingerprint }))),
-        incoming.map(request => h(IncomingRequest, { key: request.id, request, disabled: locked, decide })),
+      return h('section', { className: 'card', 'aria-label': '好友' }, h('h2', null, '邀请和添加好友'),
+        button(invite?.link ? '收起我的邀请' : '显示我的邀请', () => invite?.link ? setInvite(null) :
+          run(async () => setInvite(await api('share-invite', { input: {} }))), locked || !ready),
+        invite?.link && h('div', { className: 'rows' },
+          h('img', { className: 'invite-qr', src: invite.qr, alt: '好友邀请二维码', width: 264, height: 264 }),
+          label('邀请链接', h('textarea', { readOnly: true, rows: 2, value: invite.link })),
+          label('设备指纹', h('input', { readOnly: true, value: invite.fingerprint })),
+          h('div', { className: 'row' },
+            button('复制邀请链接', () => run(async () => { await copyText(invite.link); return '已复制邀请链接' }), locked),
+            button('复制设备指纹', () => run(async () => { await copyText(invite.fingerprint); return '已复制设备指纹' }), locked)),
+          h('small', null, '请私下发送链接或二维码。接收方将链接粘贴到下方，另外通过可信渠道核对指纹。'),
+          invite.relay.startsWith('http://127.0.0.1') && h('small', null, '这份邀请使用本机地址，跨电脑前请先配置私有 HTTPS 服务。')),
+        incoming.map(request => h(IncomingRequest, { key: request.id, request, disabled: locked || !ready, decide })),
         h('fieldset', { className: 'rows', disabled: locked }, h('legend', null, '添加好友'),
+          label('对方的邀请码或链接', h('textarea', { value: code, rows: 2, maxLength: 2300, onChange: event => {
+            setCode(event.target.value)
+            setPreview(null)
+            setVerified(false)
+          } })),
+          button('读取邀请', () => run(async () => {
+            setPreview(await api('read-invite', { input: { value: code.trim() } }))
+            setVerified(false)
+            setFingerprint('')
+          }), !code.trim()),
+          preview && h('div', { className: 'rows context-actions', 'aria-label': '好友邀请预览' },
+            h('p', null, preview.relay ? `对方使用 ${preview.relay}` : '邀请码已读取，请确认双方使用同一个服务。'),
+            differentRelay && h('div', { className: 'rows' }, h('p', null, '请先核对并连接对方的服务地址，再发送申请。'),
+              button('填入对方服务地址', () => onRelay(preview.relay))),
+            h('small', null, '请让对方通过可信渠道提供设备指纹，并在下方核对。')),
           label('好友备注名', h('input', { value: alias, maxLength: 32, onChange: event => setAlias(event.target.value) })),
-          label('对方的邀请', h('textarea', { value: code, rows: 2, maxLength: 768, onChange: event => setCode(event.target.value) })),
-          label('已核对的对方设备指纹', h('input', { value: fingerprint, maxLength: 64, onChange: event => setFingerprint(event.target.value) })),
+          label('已核对的对方设备指纹', h('input', { value: fingerprint, maxLength: 64, onChange: event => {
+            setFingerprint(event.target.value)
+            setVerified(false)
+          } })),
+          h('label', { className: 'row' }, h('input', { type: 'checkbox', checked: verified,
+            disabled: !preview || fingerprint.trim().toLowerCase() !== preview.fingerprint,
+            onChange: event => setVerified(event.target.checked) }), '我已通过可信渠道核对指纹'),
           button('发送好友申请', () => run(async () => {
-            const result = await api('request-friend', { input: { alias: alias.trim(), code: code.trim(), fingerprint: fingerprint.trim().toLowerCase() } })
+            const result = await api('request-friend', { input: { alias: alias.trim(), code: preview.code,
+              fingerprint: fingerprint.trim().toLowerCase() } })
             setAlias('')
             setCode('')
             setFingerprint('')
+            setPreview(null)
+            setVerified(false)
             return result.status === 'already-friend' ? '该设备已是好友' :
               result.queued ? '好友申请已保存，等待同步' : '好友申请已发送，等待对方确认'
-          }), !(alias && code && fingerprint))),
+          }), !ready || differentRelay || !preview || !verified || !alias.trim(), true)),
         outgoing.length > 0 && h('section', { 'aria-label': '发出的好友申请' }, h('h2', null, '发出的好友申请'),
           h('ul', null, outgoing.map(request => h('li', { key: request.id }, `${request.alias} · ${requestLabels[request.status]}`)))))
     }
@@ -379,6 +431,7 @@ window.__ModuleLoader__.load({
       const [feed, setFeed] = useState(null)
       const [drafts, setDrafts] = useState({})
       const [settingsShown, showSettings] = useState(false)
+      const [suggestedRelay, suggestRelay] = useState('')
       const [friendsShown, showFriends] = useState(false)
       const [profileShown, showProfile] = useState(false)
       const [friendQuery, setFriendQuery] = useState('')
@@ -504,6 +557,9 @@ window.__ModuleLoader__.load({
 
       function selectThread(thread) {
         setAlias(thread.alias)
+        showFriends(false)
+        showSettings(false)
+        showProfile(false)
         setSharing(false)
         setSelecting(false)
         setPicked([])
@@ -588,21 +644,31 @@ window.__ModuleLoader__.load({
               h('div', { className: 'rows' },
                 h('div', { className: 'row' }, h('h1', null, displayName),
                   version && h('small', { className: 'muted' }, `版本 ${version}`)),
-                h('small', { className: 'muted' }, relayLabel))),
+                h('small', { className: 'muted' }, relayLabel),
+                relay?.lastSyncAt && h('small', { className: 'muted' }, `上次同步 ${timeLabel(relay.lastSyncAt)}`))),
             h('div', { className: 'row' },
-              button(pendingFriends ? `好友管理 · ${pendingFriends}` : '好友管理', () => showFriends(value => !value), !ready || busy),
+              button(pendingFriends ? `好友管理 · ${pendingFriends}` : '好友管理', () => showFriends(value => !value), !device || busy),
               button('个人资料', () => showProfile(value => !value), !device || busy),
               button('投递设置', () => showSettings(value => !value), !relay || busy),
               button('同步收件', synchronize, !device?.ready || busy))),
           h('output', { role: 'status' }, busy ? '处理中…' : notice || loadError || updates?.error),
+          relay?.registered && relay.status === 'disconnected' && h('div', { className: 'row context-actions', role: 'alert' },
+            h('span', null, '连接已中断，待发消息保存在本机。恢复后会自动重试。'),
+            button('立即重连', synchronize, busy)),
           profileShown && h(ProfilePanel, { profile, disabled: busy, run }),
-          relay && settingsShown && h(RelayPanel, { relay, run, locked: busy,
+          device && !conversations.length && h('section', { className: 'card', 'aria-label': '开始聊天' },
+            h('h2', null, ready ? '添加第一位好友' : '开始使用 dsh-DeepChat'),
+            h('p', null, ready ? '交换邀请并核对设备指纹，对方接受后就能聊天。' : '先连接聊天服务，也可以粘贴好友邀请查看对方的服务地址。'),
+            ready && button('邀请或添加好友', () => showFriends(true), busy)),
+          relay && (settingsShown || !relay.registered) && h(RelayPanel, { relay, run, locked: busy, suggestedOrigin: suggestedRelay,
             onRegister(value) {
-              setInvite(value)
+              setInvite(null)
+              suggestRelay('')
               showSettings(false)
               showFriends(true)
             } }),
-          ready && friendsShown && h(FriendsPanel, { invite, setInvite, requests: device.requests, locked: busy, run }),
+          device && (friendsShown || !ready) && h(FriendsPanel, { invite, setInvite, requests: device.requests, locked: busy, run, relay, ready,
+            onRelay(origin) { suggestRelay(origin); showSettings(true) } }),
           h('div', { className: 'workspace' },
             h('nav', { className: 'threads', 'aria-label': '好友列表' }, h('h2', { className: 'roster-heading' }, '好友列表'),
               h('input', { type: 'search', placeholder: '搜索好友', 'aria-label': '搜索好友', value: friendQuery,
@@ -619,7 +685,7 @@ window.__ModuleLoader__.load({
               h('span', { className: 'rows' }, thread.lastAt && h('small', { className: 'muted' }, timeLabel(thread.lastAt)),
                 thread.unread > 0 && h('small', { className: 'unread-count' }, thread.unread)))) :
                 h('p', { className: 'muted' }, device ? (conversations.length ? '没有匹配的会话' : '暂无好友') : '正在读取好友列表…'),
-              button('添加好友', () => ready ? showFriends(true) : showSettings(true), busy || !relay)),
+              button('添加好友', () => showFriends(true), busy || !device)),
             h('section', { className: 'chat-pane', 'aria-label': '聊天框' },
               h('header', { className: 'chat-header rows' }, h('div', { className: 'row spread' },
                 h('div', { className: 'row' }, active && h(Avatar, { name: alias }), h('h2', null, active?.alias ?? '聊天')),
