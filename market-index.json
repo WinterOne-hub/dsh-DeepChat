@@ -19,23 +19,6 @@
         "en": "Exchange encrypted messages and files. Open selected chat content in a new DSH session draft.",
         "zh": "收发加密消息、文件和 DSH 回复。选中聊天内容，带到 DSH 新会话讨论。"
       },
-      "keywords": [
-        "dsh",
-        "dsh-plugin",
-        "deepseek",
-        "deepseek-harness",
-        "deepchat",
-        "chat",
-        "messaging",
-        "encrypted-chat",
-        "file-sharing",
-        "self-hosted",
-        "ai",
-        "llm",
-        "聊天",
-        "加密聊天",
-        "材料分享"
-      ],
       "author": "WinterOne-hub",
       "homepage": "https://github.com/WinterOne-hub/dsh-DeepChat#readme",
       "repository": {
@@ -54,7 +37,26 @@
             "dsh": ">=0.2.0-rc.2 <0.3.0 || >=0.2.2-rc.3 <0.2.2"
           }
         }
-      ]
+      ],
+      "metadata": {
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "deepseek",
+          "deepseek-harness",
+          "deepchat",
+          "chat",
+          "messaging",
+          "encrypted-chat",
+          "file-sharing",
+          "self-hosted",
+          "ai",
+          "llm",
+          "聊天",
+          "加密聊天",
+          "材料分享"
+        ]
+      }
     }
   ]
 }
