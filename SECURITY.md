@@ -1,9 +1,17 @@
-# 安全与漏洞报告
+# 安全说明 / Security
 
-目前发布的是技术预览版，供本机或受控网络中的用户试用。请将投递服务限制在可信网络内。跨设备部署时，在其前面使用私有 HTTPS 入口，并通过代理或网络层限制访问。现有邮箱配额容易被占满，服务缺少公开注册所需的准入、限流和回收机制。
+## 中文
 
-消息和附件在设备端加密。中继暂存密文，可以观察邮箱标识、流量大小和在线时机。当前协议缺少前向保密。设备私钥保存在受文件权限保护的本机文件中，能读取私钥和历史密文的人有可能解密旧消息。请通过可信渠道核对好友指纹，并私下交换邀请，因为邀请包含向设备投递的凭据。
+消息和附件在设备端加密。中继暂存密文，能看到邮箱标识、消息大小和时间。当前协议缺少前向保密，设备私钥泄露后，持有历史密文的人可能解密旧消息。私钥保存在受文件权限保护的本机文件中。请私下交换邀请，并通过可信渠道核对设备指纹。
 
-「带到 DSH 新会话」会把选中的内容填入 DSH 草稿。你主动点击发送后，草稿中的内容才会交给所选模型服务；附件按界面选择带入。
+中继供本机或受控网络试用。跨设备时，请使用受访问控制保护的私有 HTTPS 入口。当前中继最多有 64 个邮箱，缺少注册准入、限流和邮箱回收。
 
-发现安全问题，请通过 [GitHub 私密漏洞报告](https://github.com/WinterOne-hub/dsh-DeepChat/security/advisories/new) 提交，附上插件版本、DSH 版本和用虚构数据复现的步骤。请勿在报告里附上真实对话、身份密钥、邀请或访问凭据。
+发现漏洞，请通过 [GitHub 私密漏洞报告](https://github.com/WinterOne-hub/dsh-DeepChat/security/advisories/new) 提交。请提供插件版本、DSH 版本和用虚构数据复现的步骤，避免在报告中加入真实聊天、密钥、邀请或凭据。
+
+## English
+
+Devices encrypt messages and attachments before delivery. The relay temporarily stores ciphertext and can see mailbox IDs, message sizes, and timing. The protocol lacks forward secrecy. Someone who obtains a device private key and old ciphertext may decrypt old messages. The private key is stored in a local file protected by file permissions. Exchange invitations privately and verify fingerprints over a trusted channel.
+
+Run the relay locally or on a trusted network. For use across devices, put it behind a private HTTPS endpoint with access controls. The relay supports up to 64 mailboxes and lacks registration controls, rate limits, and mailbox recycling.
+
+Report vulnerabilities privately through [GitHub](https://github.com/WinterOne-hub/dsh-DeepChat/security/advisories/new). Include the plugin version, the DSH version, and steps to reproduce the issue with made-up data. Keep real chats, keys, invitations, and credentials out of the report.
