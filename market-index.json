@@ -26,6 +26,18 @@
       },
       "versions": [
         {
+          "version": "0.0.2",
+          "publishTimestamp": 1794994153,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/WinterOne-hub/dsh-DeepChat",
+            "commit": "74769058d5662aaff729d384d9c096bfa4957cf0"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0 || >=0.2.2-rc.3 <0.2.2"
+          }
+        },
+        {
           "version": "0.0.1",
           "publishTimestamp": 1794931196,
           "source": {
