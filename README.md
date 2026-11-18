@@ -2,13 +2,13 @@
 
 DeepSeek Harness 加密聊天与材料分享插件 · Encrypted chat and file sharing for DeepSeek Harness
 
-[中文](#中文) · [English](#english) · [v0.0.1 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.0.1)
+[中文](#中文) · [English](#english) · [v0.0.2 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.0.2)
 
 | 下载 / Download | 链接 / Link |
 | --- | --- |
-| 安装包 / Plugin package | [dsh-DeepChat-0.0.1.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.1/dsh-DeepChat-0.0.1.tgz) |
-| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.1/SHA256SUMS) |
-| 源码 / Source code | [v0.0.1 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.0.1.zip) |
+| 安装包 / Plugin package | [dsh-DeepChat-0.0.2.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.2/dsh-DeepChat-0.0.2.tgz) |
+| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.0.2/SHA256SUMS) |
+| 源码 / Source code | [v0.0.2 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.0.2.zip) |
 
 ## 中文
 
@@ -24,7 +24,7 @@ dsh-DeepChat 是 DeepSeek Harness 的第三方聊天插件。它在侧栏收发�
 
 ### 连接和使用
 
-0.0.2 开发版可点「一键开始本机试用」，插件会启动本地服务并注册设备。服务只监听本机，随 DSH 启动和退出，也可以在设置中停止。跨电脑聊天需要双方使用同一个私有 HTTPS 服务。邀请链接或二维码可私下交换，接收方把链接粘贴到「添加好友」，读取后核对设备指纹再发送申请。打开链接会显示项目页面，添加好友在插件中完成。
+0.0.2 可点「一键开始本机试用」，插件会启动本地服务并注册设备。服务只监听本机，随 DSH 启动和退出，也可以在设置中停止。跨电脑聊天需要双方使用同一个私有 HTTPS 服务。邀请链接或二维码可私下交换，接收方把链接粘贴到「添加好友」，读取后核对设备指纹再发送申请。打开链接会显示项目页面，添加好友在插件中完成。
 
 使用 0.0.1，或需要单独运行中继时，在源码目录运行 `npm ci` 和 `node src/serve.js`，中继默认监听 `127.0.0.1:8611`。在插件的「投递设置」中填入地址，点击「保存并注册」。跨设备时，双方需要连接同一个私有 HTTPS 中继，并通过可信渠道交换邀请、核对设备指纹。
 
@@ -62,7 +62,7 @@ dsh-DeepChat is a third-party chat plugin for DeepSeek Harness. Send encrypted m
 
 ### Connect and use
 
-The 0.0.2 development build can start a local relay and register the device from the setup screen. The relay listens on loopback only, starts and stops with DSH, and can be stopped in settings. To chat across computers, both users need the same private HTTPS relay. Exchange invitation links or QR codes privately. Paste the link into the plugin, check the device fingerprint over a trusted channel, and send a friend request. Opening the link shows the project page; adding a contact happens inside the plugin.
+Version 0.0.2 can start a local relay and register the device from the setup screen. The relay listens on loopback only, starts and stops with DSH, and can be stopped in settings. To chat across computers, both users need the same private HTTPS relay. Exchange invitation links or QR codes privately. Paste the link into the plugin, check the device fingerprint over a trusted channel, and send a friend request. Opening the link shows the project page; adding a contact happens inside the plugin.
 
 On 0.0.1, or to run a standalone relay, run `npm ci` and `node src/serve.js` from the source directory. The relay listens on `127.0.0.1:8611` by default. Enter its address in the plugin's relay settings and register your device. To chat across devices, connect both to the same private HTTPS relay, exchange invitations over a trusted channel, and check device fingerprints.
 
@@ -93,7 +93,7 @@ This technical preview is for local use or trusted networks. Chat history stays 
 ```sh
 shasum -a 256 -c SHA256SUMS
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$PWD/dsh-DeepChat-0.0.1.tgz" --offline
+  plugin --profile desktop add "$PWD/dsh-DeepChat-0.0.2.tgz" --offline
 ```
 
 **DSH Web**
