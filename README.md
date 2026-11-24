@@ -2,13 +2,13 @@
 
 DeepSeek Harness 加密聊天与材料分享插件 · Encrypted chat and file sharing for DeepSeek Harness
 
-[中文](#中文) · [English](#english) · [v0.1.0 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.1.0)
+[中文](#中文) · [English](#english) · [v0.1.1 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.1.1)
 
 | 下载 / Download | 链接 / Link |
 | --- | --- |
-| 安装包 / Plugin package | [dsh-DeepChat-0.1.0.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.0/dsh-DeepChat-0.1.0.tgz) |
-| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.0/SHA256SUMS) |
-| 源码 / Source code | [v0.1.0 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.1.0.zip) |
+| 安装包 / Plugin package | [dsh-DeepChat-0.1.1.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.1/dsh-DeepChat-0.1.1.tgz) |
+| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.1/SHA256SUMS) |
+| 源码 / Source code | [v0.1.1 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.1.1.zip) |
 
 ## 中文
 
@@ -37,6 +37,8 @@ dsh-DeepChat 是 DeepSeek Harness 的第三方聊天插件。它在侧栏收发�
 消息下方的「引用回复」会在输入框上方预览原文，最多引用 600 字。发送后以文字引用显示，兼容 0.0.2。取消引用不影响已写的回复，切换好友会保留各自的草稿和引用。引用和回复合计仍受 8192 字节限制。
 
 ### 备份与恢复
+
+从聊天面板点「加密备份」，输入两次口令后下载 `.deepchat` 文件。聊天数据库最多 16 MiB。下载文件可以用下方命令恢复。
 
 退出 DSH 后，可用 Node.js 24 从源码目录运行 `npm ci`，再按下方命令备份。备份包含设备私钥、好友、历史、附件和待发消息，使用口令加密。设备数据库上限为 128 MiB。恢复到新目录后，将 `DSH_CHAT_DEVICE` 指向该目录启动 DSH，重新设置投递地址并注册。中继队列、投递设置和个人资料需单独保留。迁移后只在一处使用恢复的设备身份。
 
@@ -86,6 +88,8 @@ Choose **引用回复** (Reply with quote) under a message to preview up to 600 
 
 ### Backup and restore
 
+Choose **加密备份** (Encrypted backup) in the chat panel, then enter your passphrase twice to download a `.deepchat` file. The panel supports chat databases up to 16 MiB. Use the restore command below with the downloaded file.
+
 Quit DSH. With Node.js 24, run `npm ci` in the source directory, then use the commands below. The passphrase encrypts the device keys, contacts, history, attachments and outbox. The backup supports a device database of up to 128 MiB. Restore to a new directory, start DSH with `DSH_CHAT_DEVICE` set to that directory, then set the relay address and register. Relay queues, relay settings and profiles are separate. After migration, use the restored identity on one active device only.
 
 ### Find it in DSH
@@ -113,7 +117,7 @@ This release is intended for local use and private networks. Chat history stays 
 ```sh
 shasum -a 256 -c SHA256SUMS
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$PWD/dsh-DeepChat-0.1.0.tgz" --offline
+  plugin --profile desktop add "$PWD/dsh-DeepChat-0.1.1.tgz" --offline
 ```
 
 **DSH Web**

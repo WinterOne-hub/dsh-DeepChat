@@ -147,14 +147,18 @@ window.__ModuleLoader__.load({
       return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
     }
 
-    async function getFile(item) {
-      const file = await api('download', { id: item.id, binary: true })
+    function downloadBlob(file, filename) {
       const url = URL.createObjectURL(file)
       const link = document.createElement('a')
       link.href = url
-      link.download = item.file.name
+      link.download = filename
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
+    }
+
+    async function getFile(item) {
+      const file = await api('download', { id: item.id, binary: true })
+      downloadBlob(file, item.file.name)
     }
 
     const label = (title, control) => h('label', null, title, cloneElement(control, { 'aria-label': title }))
@@ -171,6 +175,38 @@ window.__ModuleLoader__.load({
     }
 
     const clientMetadata = () => ({ locale: navigator.language, timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60 })
+
+    function BackupPanel({ busy, run }) {
+      const [password, setPassword] = useState('')
+      const [confirmation, setConfirmation] = useState('')
+      const longEnough = Array.from(password).length >= 12
+      const matches = password === confirmation
+
+      function submit(event) {
+        event.preventDefault()
+        if (busy || !longEnough || !matches) return
+        void run(async () => {
+          const pending = api('export-backup', { input: { password }, binary: true })
+          setPassword('')
+          setConfirmation('')
+          const file = await pending
+          const date = new Date().toISOString().slice(0, 10)
+          downloadBlob(file, `dsh-DeepChat-${date}.deepchat`)
+          return '已发起加密备份下载'
+        })
+      }
+
+      return h('form', { className: 'card', 'aria-label': '加密备份', onSubmit: submit },
+        h('h2', null, '导出加密备份'),
+        h('p', null, '备份包含设备身份、好友、历史、附件和待发消息。聊天数据库超过 16 MiB 时，请用命令行备份。'),
+        h('small', { className: 'muted' }, '口令至少 12 个字符。恢复时需要同一个口令，请单独保管。'),
+        label('备份口令', h('input', { type: 'password', value: password, autoComplete: 'new-password', maxLength: 256, disabled: busy,
+          onChange: event => setPassword(event.target.value) })),
+        label('再次输入备份口令', h('input', { type: 'password', value: confirmation, autoComplete: 'new-password', maxLength: 256, disabled: busy,
+          onChange: event => setConfirmation(event.target.value) })),
+        confirmation && !matches && h('small', { role: 'status' }, '两次口令不一致'),
+        h('button', { type: 'submit', className: 'primary', disabled: busy || !longEnough || !matches }, '下载加密备份'))
+    }
 
     function ProfilePanel({ profile, disabled, run }) {
       const [name, setName] = useState(profile?.name ?? '')
@@ -447,6 +483,7 @@ window.__ModuleLoader__.load({
       const [suggestedRelay, suggestRelay] = useState('')
       const [friendsShown, showFriends] = useState(false)
       const [profileShown, showProfile] = useState(false)
+      const [backupShown, showBackup] = useState(false)
       const [friendQuery, setFriendQuery] = useState('')
       const [friendFilter, setFriendFilter] = useState('all')
       const [security, setSecurity] = useState(null)
@@ -583,6 +620,7 @@ window.__ModuleLoader__.load({
         showFriends(false)
         showSettings(false)
         showProfile(false)
+        showBackup(false)
         setSharing(false)
         setSelecting(false)
         setPicked([])
@@ -693,6 +731,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'row' },
               button(pendingFriends ? `好友管理 · ${pendingFriends}` : '好友管理', () => showFriends(value => !value), !device || busy),
               button('个人资料', () => showProfile(value => !value), !device || busy),
+              button('加密备份', () => showBackup(value => !value), !device?.ready || busy),
               button('投递设置', () => showSettings(value => !value), !relay || busy),
               button('同步收件', synchronize, !device?.ready || busy))),
           h('output', { role: 'status' }, busy ? '处理中…' : notice || loadError || updates?.error),
@@ -700,6 +739,7 @@ window.__ModuleLoader__.load({
             h('span', null, '连接已中断，待发消息保存在本机。恢复后会自动重试。'),
             button('立即重连', synchronize, busy)),
           profileShown && h(ProfilePanel, { profile, disabled: busy, run }),
+          backupShown && device?.ready && h(BackupPanel, { busy, run }),
           device && !conversations.length && h('section', { className: 'card', 'aria-label': '开始聊天' },
             h('h2', null, ready ? '添加第一位好友' : '开始使用 dsh-DeepChat'),
             h('p', null, ready ? '交换邀请并核对设备指纹，对方接受后就能聊天。' : '先连接聊天服务，也可以粘贴好友邀请查看对方的服务地址。'),

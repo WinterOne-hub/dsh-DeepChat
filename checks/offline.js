@@ -675,3 +675,37 @@ test('encrypted backup restores identity, history, attachments and queued messag
   await lab.bob.sync()
   assert.equal((await lab.bob.history()).at(-1).id, queued.id)
 })
+
+test('panel backup requires the local DSH origin and downloads an archive the CLI can restore', async t => {
+  const lab = await setup(t)
+  const sent = await lab.alice.send('bob', 'backup from local panel')
+  const handler = createHandler({ directory: join(lab.root, 'alice'), deviceOptions: {
+    request() { throw new Error('Backup must not reach the relay') }
+  } })
+  const password = 'a local backup phrase'
+  function exportBackup(origin, passphrase = password) {
+    return handler(new Request('http://127.0.0.1/api/private-chat/submit', {
+      method: 'POST', headers: { origin, 'x-dsh-private-chat': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'export-backup', password: passphrase })
+    }))
+  }
+  assert.equal((await exportBackup('https://example.com')).status, 403)
+  assert.equal((await exportBackup('http://127.0.0.1', 'short')).status, 400)
+  const started = exportBackup('http://127.0.0.1')
+  assert.equal((await exportBackup('http://127.0.0.1')).status, 409)
+  const response = await started
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.match(response.headers.get('content-disposition'), /^attachment; filename="dsh-DeepChat-\d{4}-\d{2}-\d{2}\.deepchat"$/)
+  const archive = join(lab.root, 'panel.deepchat')
+  const { writeFile } = await import('node:fs/promises')
+  const { spawnSync } = await import('node:child_process')
+  const { fileURLToPath } = await import('node:url')
+  await writeFile(archive, Buffer.from(await response.arrayBuffer()))
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../src/cli.js', import.meta.url)),
+    join(lab.root, 'restored'), 'restore', archive], { input: password, encoding: 'utf8', timeout: 10_000 })
+  assert.equal(result.status, 0, result.stderr)
+  const restored = lab.connect('restored')
+  assert.deepEqual(restored.invitation(), lab.alice.invitation())
+  assert.equal((await restored.history())[0].id, sent.id)
+})

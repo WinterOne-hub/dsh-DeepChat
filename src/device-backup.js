@@ -35,7 +35,9 @@ function keyFor(password, salt) {
   return deriveKey(password, salt, 32, passwordOptions)
 }
 
-export async function backupDevice(directory, destination, password) {
+export const maxPanelBackupBytes = 16 * 1024 * 1024
+
+export async function createDeviceBackup(directory, password, { databaseLimit = maxDatabase } = {}) {
   const salt = randomBytes(16)
   const nonce = randomBytes(12)
   const key = await keyFor(password, salt)
@@ -49,31 +51,35 @@ export async function backupDevice(directory, destination, password) {
     try {
       const { page_count: pages } = database.prepare('PRAGMA page_count').get()
       const { page_size: pageSize } = database.prepare('PRAGMA page_size').get()
-      if (pages * pageSize > maxDatabase) throw new Error('Device database exceeds the 128 MiB backup limit')
+      if (pages * pageSize > databaseLimit) throw new Error(`设备数据库超过 ${databaseLimit / (1024 * 1024)} MiB 的备份上限`)
       await backup(database, snapshot)
     } finally {
       database.close()
     }
-    const data = await readBounded(snapshot, maxDatabase)
+    const data = await readBounded(snapshot, databaseLimit)
     const length = Buffer.alloc(4)
     length.writeUInt32BE(identity.length)
     const cipher = createCipheriv('aes-256-gcm', key, nonce)
     cipher.setAAD(header)
-    const archive = Buffer.concat([header, cipher.update(length), cipher.update(identity), cipher.update(data), cipher.final(), cipher.getAuthTag()])
-    const output = await open(destination, 'wx', 0o600)
-    try {
-      try {
-        await output.writeFile(archive)
-        await output.sync()
-      } finally {
-        await output.close()
-      }
-    } catch (error) {
-      await rm(destination, { force: true })
-      throw error
-    }
+    return Buffer.concat([header, cipher.update(length), cipher.update(identity), cipher.update(data), cipher.final(), cipher.getAuthTag()])
   } finally {
     await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+export async function backupDevice(directory, destination, password) {
+  const archive = await createDeviceBackup(directory, password)
+  const output = await open(destination, 'wx', 0o600)
+  try {
+    try {
+      await output.writeFile(archive)
+      await output.sync()
+    } finally {
+      await output.close()
+    }
+  } catch (error) {
+    await rm(destination, { force: true })
+    throw error
   }
 }
 

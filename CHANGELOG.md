@@ -1,5 +1,10 @@
 # 开发记录 / Development notes
 
+## 0.1.1
+
+- 可在聊天面板输入口令并下载加密设备备份。备份与命令行恢复兼容。
+- Download an encrypted device backup from the chat panel. The command-line restore accepts the same file format.
+
 ## 0.1.0 / First stable release
 
 - 增加密码加密的设备备份与恢复，保留设备身份、好友、聊天记录、附件和待发队列。

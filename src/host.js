@@ -6,6 +6,7 @@ import { chatProfile } from './chat-profile.js'
 import { chatRuntime } from './chat-runtime.js'
 import { validText } from './protocol.js'
 import { readSharedInvitation, shareInvitation } from './invitation-share.js'
+import { createDeviceBackup, maxPanelBackupBytes } from './device-backup.js'
 
 export const name = 'dsh-private-chat'
 export const inject = ['connection', 'sessionQuery']
@@ -76,6 +77,22 @@ async function parseInput(request) {
 export function createHandler({ sessions, directory, deviceOptions = {}, pollMs = 10_000, readAccount }) {
   const chat = chatRuntime({ directory, deviceOptions, pollMs })
   const profile = chatProfile(directory, readAccount)
+  let exportingBackup = false
+
+  async function exportBackup(password) {
+    if (exportingBackup) return json({ error: '正在生成备份，请稍后重试' }, 409)
+    exportingBackup = true
+    try {
+      if (!(await chat.overview()).ready) throw new Error('请先初始化聊天设备')
+      const archive = await createDeviceBackup(directory, password, { databaseLimit: maxPanelBackupBytes })
+      const date = new Date().toISOString().slice(0, 10)
+      return new Response(archive, { headers: {
+        ...headers, 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="dsh-DeepChat-${date}.deepchat"`
+      } })
+    } finally {
+      exportingBackup = false
+    }
+  }
   async function sessionList() {
     const records = await sessions.listSessions()
     const ids = records.filter(record => record.header.origin !== 'subagent').slice(0, 24).map(record => record.header.id)
@@ -123,6 +140,7 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
 
       const body = await parseInput(request)
       switch (body.action) {
+        case 'export-backup': return await exportBackup(body.password)
         case 'preview-account-profile': return json(await profile.preview(body.client))
         case 'save-account-profile': {
           const saved = await profile.usePreview(body.ticket, body.client)
