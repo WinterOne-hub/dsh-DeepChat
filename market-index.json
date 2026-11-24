@@ -5,8 +5,8 @@
     "zh": "dsh-DeepChat 加密聊天"
   },
   "description": {
-    "en": "Chat and file sharing for DeepSeek Harness. Self-hosted technical preview.",
-    "zh": "DeepSeek Harness 聊天与材料分享插件，自托管技术预览。"
+    "en": "Encrypted chat and file sharing for DeepSeek Harness, with a self-hosted relay.",
+    "zh": "DeepSeek Harness 加密聊天与材料分享，支持自托管中继。"
   },
   "plugins": [
     {
@@ -25,6 +25,18 @@
         "url": "https://github.com/WinterOne-hub/dsh-DeepChat"
       },
       "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1795502503,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/WinterOne-hub/dsh-DeepChat",
+            "commit": "e3da12325eaf72e2606a2cb614369d9a9928adc8"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0 || >=0.2.2-rc.3 <0.2.2"
+          }
+        },
         {
           "version": "0.0.2",
           "publishTimestamp": 1794994153,
