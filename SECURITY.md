@@ -6,7 +6,9 @@
 
 邀请链接的片段包含设备投递凭据和服务地址，请私下交换。二维码完全在本机生成。链接只预填邀请，发送申请和切换服务仍需用户操作。
 
-中继供本机或受控网络试用。跨设备时，请使用受访问控制保护的私有 HTTPS 入口。当前中继最多有 64 个邮箱，缺少注册准入、限流和邮箱回收。
+备份文件包含设备私钥，使用 scrypt 派生密钥与 AES-256-GCM 加密。请单独保存备份口令。恢复后的设备使用同一身份，只保留一个运行实例。
+
+中继用于本机或受控网络。跨设备时，请使用受访问控制保护的私有 HTTPS 入口。当前中继最多有 64 个邮箱，缺少注册准入、限流和邮箱回收。
 
 发现漏洞，请通过 [GitHub 私密漏洞报告](https://github.com/WinterOne-hub/dsh-DeepChat/security/advisories/new) 提交。请提供插件版本、DSH 版本和用虚构数据复现的步骤，避免在报告中加入真实聊天、密钥、邀请或凭据。
 
@@ -15,6 +17,8 @@
 Devices encrypt messages and attachments before delivery. The relay temporarily stores ciphertext and can see mailbox IDs, message sizes, and timing. The protocol lacks forward secrecy. Someone who obtains a device private key and old ciphertext may decrypt old messages. The private key is stored in a local file protected by file permissions. Exchange invitations privately and verify fingerprints over a trusted channel.
 
 The fragment of an invitation link contains the device delivery credential and relay address. Share it privately. QR codes are generated locally. Reading an invitation only fills in its details; sending a request or switching relays requires user action.
+
+Backups contain device private keys and use AES-256-GCM with a key derived by scrypt. Store the passphrase separately. After restoration, run only one instance of the device identity.
 
 Run the relay locally or on a trusted network. For use across devices, put it behind a private HTTPS endpoint with access controls. The relay supports up to 64 mailboxes and lacks registration controls, rate limits, and mailbox recycling.
 

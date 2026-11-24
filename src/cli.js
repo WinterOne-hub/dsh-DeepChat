@@ -1,9 +1,10 @@
 import { writeFileSync } from 'node:fs'
 import { initializeDevice, openDevice } from './client.js'
+import { backupDevice, restoreDevice } from './device-backup.js'
 import { maxTextBytes } from './protocol.js'
 
 const [, , directory, command, ...args] = process.argv
-const commands = { init: 0, register: 0, invite: 0, trust: 2, send: 1, sync: 0, history: 0, save: 2 }
+const commands = { init: 0, register: 0, invite: 0, trust: 2, send: 1, sync: 0, history: 0, save: 2, backup: 1, restore: 1 }
 
 async function readInput(limit) {
   const chunks = []
@@ -17,9 +18,20 @@ async function readInput(limit) {
 }
 
 if (!directory || !Object.hasOwn(commands, command) || args.length !== commands[command]) {
-  console.error('Usage: node src/cli.js STATE_DIR init|register|invite|trust NAME FINGERPRINT|send NAME|sync|history|save ID DESTINATION')
+  console.error('Usage: node src/cli.js STATE_DIR init|register|invite|trust NAME FINGERPRINT|send NAME|sync|history|save ID DESTINATION|backup ARCHIVE|restore ARCHIVE')
   console.error('trust reads the invitation from stdin. send reads the message from stdin.')
+  console.error('backup and restore read the passphrase from stdin. Restore requires a new device directory.')
   process.exitCode = 1
+} else if (command === 'backup' || command === 'restore') {
+  try {
+    const password = (await readInput(1026)).replace(/\r?\n$/, '')
+    if (command === 'backup') await backupDevice(directory, args[0], password)
+    else await restoreDevice(args[0], directory, password)
+    console.log(command === 'backup' ? 'Encrypted device backup saved' : 'Device backup restored')
+  } catch (error) {
+    console.error(error.message)
+    process.exitCode = 1
+  }
 } else {
   let device
   try {

@@ -1,5 +1,19 @@
 # 开发记录 / Development notes
 
+## 0.1.0 / First stable release
+
+- 增加密码加密的设备备份与恢复，保留设备身份、好友、聊天记录、附件和待发队列。
+- 在当前好友的本机聊天记录中搜索文字和附件名，每次检查 100 条，可继续搜索更早记录。
+- 打开搜索结果时显示前后各最多 20 条消息，标出目标消息，支持返回最新消息。
+- 支持引用消息回复；引用预览和未发草稿按好友分别保留，发送前由本机核对原消息。
+- 搜索在内存中解密，不建立明文索引；引用作为加密文字发送，兼容旧版。
+
+- Back up and restore the device identity, contacts, history, attachments and outbox with a passphrase.
+- Search local message text and attachment names in batches of 100, with an option to scan older history.
+- Open a result with up to 20 messages on each side, highlight the result, and return to the latest messages.
+- Reply with a quote. Drafts and quote previews stay separate per contact; the local host verifies the original message.
+- Search decrypts records in memory without a plaintext index. Quotes travel as encrypted text compatible with older clients.
+
 ## 0.0.2
 
 2026-11-18 · 技术预览 / Technical preview

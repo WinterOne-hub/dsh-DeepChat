@@ -62,6 +62,12 @@ window.__ModuleLoader__.load({
       .private-chat .day { justify-self: center; border-radius: 9px; padding: 3px 8px; background: var(--soft); }
       .private-chat .message { max-width: min(94%, 640px); justify-self: start; background: var(--soft); padding: 8px 10px; border-radius: 12px; }
       .private-chat .message.out { justify-self: end; background: var(--bubble); }
+      .private-chat .message[data-focus=true] { box-shadow: 0 0 0 3px #c18a28; }
+      .private-chat .search-results { max-height: 240px; overflow: auto; }
+      .private-chat .search-result { width: 100%; text-align: left; display: grid; gap: 4px; }
+      .private-chat .search-result pre { max-height: 72px; overflow: hidden; }
+      .private-chat .quote-preview { border-left: 3px solid #5377df; padding: 6px 10px; background: var(--soft); }
+      .private-chat .quote-preview pre { max-height: 78px; overflow: auto; }
       .private-chat .message[data-selected=true] { outline: 2px solid #5377df; outline-offset: 1px; }
       .private-chat .message-meta { justify-self: end; opacity: .76; }
       .private-chat .message-select { display: flex; align-items:center; gap: 6px; }
@@ -231,15 +237,17 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function ChatMessage({ item, selecting, selected, disabled, toggle, synchronize, run, relay }) {
+    function ChatMessage({ item, selecting, selected, disabled, toggle, synchronize, run, relay, quote, focused }) {
       const body = h('pre', { 'data-chat-message-text': item.id }, item.text)
-      return h('article', { className: `rows message ${item.direction}`, 'data-selected': selected || undefined },
+      return h('article', { className: `rows message ${item.direction}`, 'data-selected': selected || undefined,
+        'data-focus': focused || undefined, 'data-message-id': item.id },
         selecting && h('label', { className: 'message-select' }, h('input', { type: 'checkbox', checked: selected,
           disabled, onChange: () => toggle(item.id), 'aria-label': '选择这条消息' }), '选择'),
         item.file ? h('details', { className: 'material' }, h('summary', null,
           h('strong', null, item.file.name), h('small', { className: 'muted' }, 'DSH 材料 · 回复和附件')),
           h('div', { className: 'rows' }, body, button(`保存附件（${item.file.size} 字节）`, () => run(() => getFile(item)), disabled))) : body,
-        h('small', { className: 'message-meta' }, `${timeLabel(item.sentAt)} · ${statusLabels[item.status]}`),
+        h('div', { className: 'row spread' }, button('引用回复', () => quote(item), disabled),
+          h('small', { className: 'message-meta' }, `${timeLabel(item.sentAt)} · ${statusLabels[item.status]}`)),
         item.status === 'queued' && (item.queuedRelay && item.queuedRelay !== relay?.origin
           ? h('small', null, `切回 ${item.queuedRelay} 后重试`) : button('重试投递', synchronize, disabled)))
     }
@@ -430,6 +438,11 @@ window.__ModuleLoader__.load({
       const [alias, setAlias] = useState('')
       const [feed, setFeed] = useState(null)
       const [drafts, setDrafts] = useState({})
+      const [quotes, setQuotes] = useState({})
+      const [searchShown, showSearch] = useState(false)
+      const [searchQuery, setSearchQuery] = useState('')
+      const [searchResult, setSearchResult] = useState(null)
+      const [contextId, setContextId] = useState(null)
       const [settingsShown, showSettings] = useState(false)
       const [suggestedRelay, suggestRelay] = useState('')
       const [friendsShown, showFriends] = useState(false)
@@ -457,6 +470,7 @@ window.__ModuleLoader__.load({
       const selectedFeed = feed?.alias === alias ? feed : null
       const newest = selectedFeed?.messages.at(-1)?.position
       const draft = Object.hasOwn(drafts, alias) ? drafts[alias] : ''
+      const quote = Object.hasOwn(quotes, alias) ? quotes[alias] : null
       const conversations = device?.conversations ?? []
       const shownConversations = conversations.filter(item => item.alias.toLowerCase().includes(friendQuery.trim().toLowerCase()) &&
         (friendFilter === 'all' || item.unread))
@@ -496,11 +510,12 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (!active) return
         let cancelled = false
-        void api('conversation', { id: alias }).then(next => {
+        void (contextId ? api('conversation-context', { input: { alias, id: contextId } }) :
+          api('conversation', { id: alias })).then(next => {
           if (cancelled) return
           setFeed(previous => {
             const first = next.messages[0]?.position
-            if (previous?.alias !== alias || !first || !previous.messages.some(item => item.position === first)) {
+            if (contextId || previous?.focus || previous?.alias !== alias || !first || !previous.messages.some(item => item.position === first)) {
               return { ...next, alias }
             }
             const preserved = previous.messages.filter(item => item.position < first)
@@ -509,7 +524,7 @@ window.__ModuleLoader__.load({
           setLoadError('')
         }, error => { if (!cancelled) setLoadError(error.message) })
         return () => { cancelled = true }
-      }, [alias, !!active, updates?.data?.revision])
+      }, [alias, !!active, contextId, updates?.data?.revision])
 
       useEffect(() => {
         if (!ready || syncedOnOpen.current) return
@@ -519,13 +534,17 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const list = history.current
-        if (newest && list && atBottom.current) list.scrollTop = list.scrollHeight
-      }, [alias, newest])
+        if (selectedFeed?.focus && list) {
+          const target = list.querySelector('[data-focus=true]')
+          if (target) list.scrollTop += target.getBoundingClientRect().top - list.getBoundingClientRect().top -
+            (list.clientHeight - target.clientHeight) / 2
+        } else if (newest && list && atBottom.current) list.scrollTop = list.scrollHeight
+      }, [alias, newest, selectedFeed?.focus])
 
       useEffect(() => {
         function markVisible() {
           if (document.visibilityState !== 'visible' || !document.hasFocus() || !history.current?.getClientRects().length ||
-              !active?.unread || !newest ||
+              contextId || !active?.unread || !newest ||
               (marked.current.get(alias) ?? 0) >= newest) return
           marked.current.set(alias, newest)
           void api('mark-read', { input: { alias, position: newest } }).then(refreshOverview, () => {
@@ -539,7 +558,7 @@ window.__ModuleLoader__.load({
           document.removeEventListener('visibilitychange', markVisible)
           window.removeEventListener('focus', markVisible)
         }
-      }, [alias, newest, active?.unread])
+      }, [alias, newest, active?.unread, contextId])
 
       useEffect(() => {
         function capture() {
@@ -557,6 +576,10 @@ window.__ModuleLoader__.load({
 
       function selectThread(thread) {
         setAlias(thread.alias)
+        setContextId(null)
+        showSearch(false)
+        setSearchQuery('')
+        setSearchResult(null)
         showFriends(false)
         showSettings(false)
         showProfile(false)
@@ -611,10 +634,30 @@ window.__ModuleLoader__.load({
         })
       }
 
+      function search(earlier = false) {
+        return run(async () => {
+          const next = await api('search-conversation', { input: { alias, query: searchQuery,
+            before: earlier ? searchResult.before : undefined } })
+          setSearchResult(previous => ({ ...next, query: searchQuery,
+            scanned: (earlier ? previous.scanned : 0) + next.scanned,
+            messages: [...(earlier ? previous.messages : []), ...next.messages] }))
+        })
+      }
+
+      function latest() {
+        setContextId(null)
+        setFeed(null)
+        setPicked([])
+        setHighlight(null)
+        atBottom.current = true
+      }
+
       function send() {
         return run(async () => {
-          const result = await api('send', { input: { alias, text: draft } })
+          const result = await api('send', { input: { alias, text: draft, replyTo: quote?.id } })
           setDrafts(current => ({ ...current, [alias]: '' }))
+          setQuotes(current => ({ ...current, [alias]: null }))
+          if (contextId) latest()
           atBottom.current = true
           return statusLabels[result.status]
         })
@@ -635,7 +678,8 @@ window.__ModuleLoader__.load({
         (!index || dayKey(items[index - 1].sentAt) !== dayKey(item.sentAt)) &&
           h('small', { key: `day-${item.id}`, className: 'day muted' }, dayLabel(item.sentAt)),
         h(ChatMessage, { key: item.id, item, selecting, selected: picked.includes(item.id),
-          disabled: busy || picked.length >= 10 && !picked.includes(item.id), toggle: togglePicked, synchronize, run, relay })
+          disabled: busy || picked.length >= 10 && !picked.includes(item.id), toggle: togglePicked, synchronize, run, relay, focused: item.id === selectedFeed?.focus,
+          quote: item => setQuotes(current => ({ ...current, [alias]: item })) })
       ])
       return h('section', { className: 'private-chat', 'aria-label': displayName }, h('style', null, styles),
         h('div', null,
@@ -689,7 +733,7 @@ window.__ModuleLoader__.load({
             h('section', { className: 'chat-pane', 'aria-label': '聊天框' },
               h('header', { className: 'chat-header rows' }, h('div', { className: 'row spread' },
                 h('div', { className: 'row' }, active && h(Avatar, { name: alias }), h('h2', null, active?.alias ?? '聊天')),
-                active && h('div', { className: 'row' }, button(security?.alias === alias ? '收起好友指纹' : '好友指纹', () => {
+                active && h('div', { className: 'row' }, button(searchShown ? '收起搜索' : '搜索聊天', () => showSearch(value => !value), busy), button(security?.alias === alias ? '收起好友指纹' : '好友指纹', () => {
                   if (security?.alias === alias) return setSecurity(null)
                   return run(async () => setSecurity({ alias, ...await api('contact-security', { id: alias }) }))
                 }, busy), button(selecting ? '取消选中' : '选择消息', () => {
@@ -697,13 +741,34 @@ window.__ModuleLoader__.load({
                   setPicked([])
                   includeFiles(false)
                 }, busy || !items.length))), security?.alias === alias && h('code', { className: 'security-code',
-                  'aria-label': '好友设备指纹' }, security.fingerprint.match(/.{1,4}/g).join(' '))),
+                  'aria-label': '好友设备指纹' }, security.fingerprint.match(/.{1,4}/g).join(' ')),
+                active && searchShown && h('section', { className: 'rows', 'aria-label': '搜索聊天记录' },
+                  h('form', { className: 'row', onSubmit: event => { event.preventDefault(); void search() } },
+                    h('input', { type: 'search', value: searchQuery, maxLength: 128, disabled: busy,
+                      placeholder: '搜索文字或附件名', 'aria-label': '搜索聊天内容', onChange: event => {
+                        setSearchQuery(event.target.value); setSearchResult(null)
+                      } }),
+                    h('button', { type: 'submit', disabled: busy || !searchQuery.trim() }, '搜索本机记录')),
+                  h('small', { className: 'muted' }, '仅在本机搜索。每次检查 100 条，按时间从新到旧显示。'),
+                  searchResult && h('div', { className: 'rows search-results', 'aria-label': '搜索结果' },
+                    h('small', { role: 'status' }, `已检查 ${searchResult.scanned} 条，找到 ${searchResult.messages.length} 条`),
+                    searchResult.messages.map(item => h('button', { key: item.id, type: 'button', className: 'search-result', disabled: busy,
+                      onClick: () => { setPicked([]); setHighlight(null); if (contextId !== item.id) { setContextId(item.id); setFeed(null) } } },
+                      h('small', null, `${item.direction === 'in' ? alias : '我'} · ${timeLabel(item.sentAt)} · 查看上下文`),
+                      item.file && h('strong', null, item.file.name), h('pre', null, item.text))),
+                    searchResult.before ? button('继续搜索更早记录', () => search(true), busy) : h('small', null, '已搜索全部记录'))),
+                contextId && h('div', { className: 'row context-actions' }, h('span', null, '正在查看搜索结果的前后文'),
+                  button('返回最新消息', latest, busy))),
               h('div', { className: 'history', ref: history, role: 'log', 'aria-live': 'off', 'aria-label': '聊天上下文', onScroll: event => {
                 const list = event.currentTarget
                 atBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < 80
               } }, selectedFeed?.previous && button('查看更早消息', () => run(older), busy),
                 items.length ? messageRows : h('p', { className: 'muted' }, historyHint)),
               h('div', { className: 'rows composer' },
+                quote && h('div', { className: 'rows quote-preview', 'aria-label': '待发送引用' },
+                  h('div', { className: 'row spread' }, h('small', null, `引用 ${quote.direction === 'in' ? alias : '我'}`),
+                    button('取消引用', () => setQuotes(current => ({ ...current, [alias]: null })), busy)),
+                  h('pre', null, Array.from(quote.text).slice(0, 600).join('') + (Array.from(quote.text).length > 600 ? '…' : ''))),
                 selectedItems.length > 0 && h('div', { className: 'row spread context-actions' },
                   h('span', null, `已选 ${selectedItems.length} 条消息`), attachments > 0 && h('label', { className: 'message-select' },
                     h('input', { type: 'checkbox', checked: withFiles, onChange: event => includeFiles(event.target.checked) }), `带入 ${attachments} 个附件`),

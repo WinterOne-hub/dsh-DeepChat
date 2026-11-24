@@ -135,6 +135,8 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
           return json(saved)
         }
         case 'share-context': return json(await chat.read(device => device.selectedContext(body.alias, body.ids, body.includeFiles)))
+        case 'search-conversation': return json(await chat.read(device => device.searchConversation(body.alias, body.query, body.before)))
+        case 'conversation-context': return json(await chat.read(device => device.conversationContext(body.alias, body.id)))
         case 'test-relay': return json(await chat.test(body.origin))
         case 'register': return json(await chat.register(body.origin))
         case 'start-local-relay': return json(await chat.startLocal())
@@ -153,7 +155,7 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
           return json(await chat.mutate(device => device.requestFriend(body.alias, invite.code, body.fingerprint)))
         }
         case 'decide-friend': return json(await chat.mutate(device => device.decideFriend(body.id, body.decision, body.alias, body.fingerprint)))
-        case 'send': return json(await chat.mutate(device => device.send(body.alias, body.text)))
+        case 'send': return json(await chat.mutate(device => device.send(body.alias, body.text, body.replyTo)))
         case 'send-bundle': return json(await chat.mutate(device => device.sendBundle(body.alias, body)))
         case 'mark-read': {
           const changed = await chat.mutate(device => device.markRead(body.alias, body.position), Boolean)

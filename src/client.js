@@ -220,6 +220,23 @@ export function openDevice(directory, {
     return item
   }
 
+  const queuedRoute = db.prepare(`
+    SELECT origin FROM outbox_relays WHERE id = ?
+    UNION ALL SELECT origin FROM outbox_relays JOIN outgoing_bundle_parts USING (id) WHERE bundle = ? LIMIT 1
+  `)
+  async function conversationItem(row, alias) {
+    const item = await historyItem({ ...row, alias })
+    const queuedRelay = item.status === 'queued' ? queuedRoute.get(item.id, item.id)?.origin : undefined
+    return { ...item, position: row.position, sentAt: row.expires - retentionMs, queuedRelay }
+  }
+  function selectedRow(alias, id) {
+    if (typeof alias !== 'string' || !matches(messageIdPattern, id)) throw new Error('请选择聊天消息')
+    const row = db.prepare(`SELECT h.rowid AS position, h.* FROM history h
+      JOIN contacts c ON c.mailbox = h.contact WHERE c.alias = ? AND h.id = ?`).get(alias, id)
+    if (!row) throw new Error('消息不属于当前会话')
+    return row
+  }
+
   return {
     invitation() {
       return { code: encodeInvitation(self), fingerprint: fingerprint(self) }
@@ -240,9 +257,17 @@ export function openDevice(directory, {
       await flush()
       return { status, queued: !!deliveryId && !!pendingOutbox.get(deliveryId) }
     },
-    async send(alias, text) {
+    async send(alias, text, replyTo) {
       if (!validText(text)) throw new Error('Enter nonempty text of at most 8192 UTF-8 bytes')
       const recipient = recipientByAlias(alias)
+      if (replyTo !== undefined) {
+        const row = selectedRow(alias, replyTo)
+        const original = await historyItem({ ...row, alias })
+        const excerpt = Array.from(original.text).slice(0, 600).join('')
+        const quote = excerpt + (excerpt.length < original.text.length ? '…' : '')
+        text = `引用 ${row.direction === 'in' ? alias : '我'}：\n${quote.split('\n').map(line => `> ${line}`).join('\n')}\n\n${text}`
+        if (!validText(text)) throw new Error('消息连同引用超过 8192 字节，请缩短回复')
+      }
       return submit(newPayload(identity, recipient, now(), { type: 'text', text }), recipient)
     },
     async sendBundle(alias, { reply, name, data, size, sha256, submission }) {
@@ -325,16 +350,30 @@ export function openDevice(directory, {
     async conversation(alias, before) {
       const rows = threads.page(alias, before)
       const previous = rows.length > 40 ? rows[39].position : null
-      const route = db.prepare(`
-        SELECT origin FROM outbox_relays WHERE id = ?
-        UNION ALL SELECT origin FROM outbox_relays JOIN outgoing_bundle_parts USING (id) WHERE bundle = ? LIMIT 1
-      `)
-      const messages = await Promise.all(rows.slice(0, 40).reverse().map(async row => {
-        const item = await historyItem({ ...row, alias })
-        const queuedRelay = item.status === 'queued' ? route.get(item.id, item.id)?.origin : undefined
-        return { ...item, position: row.position, sentAt: row.expires - retentionMs, queuedRelay }
-      }))
+      const messages = await Promise.all(rows.slice(0, 40).reverse().map(row => conversationItem(row, alias)))
       return { messages, previous }
+    },
+    async searchConversation(alias, query, before) {
+      if (typeof query !== 'string' || !query.trim() || Array.from(query).length > 128) throw new Error('请输入 1 至 128 字的搜索内容')
+      // Decrypt a bounded batch in memory; never persist searchable plaintext.
+      const rows = threads.page(alias, before, 100)
+      const batch = rows.slice(0, 100)
+      const needle = query.trim().normalize('NFC').toLowerCase()
+      const messages = []
+      for (const row of batch) {
+        const item = await conversationItem(row, alias)
+        if ([item.text, item.file?.name].some(value => value?.normalize('NFC').toLowerCase().includes(needle))) messages.push(item)
+      }
+      return { messages, scanned: batch.length, before: rows.length > 100 ? batch.at(-1).position : null }
+    },
+    async conversationContext(alias, id) {
+      const target = selectedRow(alias, id)
+      const preceding = db.prepare(`SELECT rowid AS position, * FROM history
+        WHERE contact = ? AND rowid < ? ORDER BY rowid DESC LIMIT 20`).all(target.contact, target.position).reverse()
+      const following = db.prepare(`SELECT rowid AS position, * FROM history
+        WHERE contact = ? AND rowid > ? ORDER BY rowid LIMIT 20`).all(target.contact, target.position)
+      return { messages: await Promise.all([...preceding, target, ...following].map(row => conversationItem(row, alias))),
+        previous: null, focus: id }
     },
     markRead: threads.markRead,
     contactFingerprint(alias) {
