@@ -709,3 +709,33 @@ test('panel backup requires the local DSH origin and downloads an archive the CL
   assert.deepEqual(restored.invitation(), lab.alice.invitation())
   assert.equal((await restored.history())[0].id, sent.id)
 })
+
+test('a local file sends without a DSH session and retains its caption, bytes and delivery receipt', async t => {
+  const lab = await setup(t)
+  const handler = createHandler({ directory: join(lab.root, 'alice'), deviceOptions: { request: lab.request } })
+  const bytes = randomBytes(maxFileBytes)
+  const file = { alias: 'bob', name: 'local-notes.txt', size: bytes.length, data: bytes.toString('base64url'),
+    sha256: hash(bytes), submission: 'a'.repeat(32), caption: '' }
+  const sendFile = input => handler(new Request('http://127.0.0.1/api/private-chat/submit', {
+    method: 'POST', headers: { 'x-dsh-private-chat': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'send-file', ...file, ...input })
+  }))
+  assert.equal((await sendFile({ caption: null })).status, 400)
+  assert.equal((await sendFile({ sha256: '0'.repeat(64) })).status, 400)
+  const sent = await sendFile({})
+  assert.equal(sent.status, 200)
+  const { id } = await sent.json()
+  assert.equal((await (await sendFile({})).json()).id, id)
+  const described = await sendFile({ caption: '  请看本地附件  ' })
+  assert.equal(described.status, 200)
+  const describedId = (await described.json()).id
+  await lab.bob.sync()
+  await lab.alice.sync()
+  const history = await lab.bob.history()
+  assert.deepEqual(history.map(item => [item.id, item.text]), [[id, '分享了一个文件'], [describedId, '请看本地附件']])
+  assert.deepEqual((await lab.bob.download(id)).bytes, bytes)
+  assert.equal((await lab.alice.history())[0].status, 'delivered')
+  const context = await lab.bob.selectedContext('alice', [describedId], true)
+  assert.match(context.prompt, /请看本地附件/)
+  assert.deepEqual(context.files, [{ name: file.name, data: file.data }])
+})

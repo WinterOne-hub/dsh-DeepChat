@@ -1,5 +1,10 @@
 # 开发记录 / Development notes
 
+## 0.1.2
+
+- 「分享材料」默认分享本地文件，可选填说明，仍可切换为「DSH 回复和文件」。两种模式都先预览再发送。
+- **Share materials** opens in local-file mode with an optional caption. Switch to **DSH reply and file** to include a reply. Both modes use a preview before sending.
+
 ## 0.1.1
 
 - 可在聊天面板输入口令并下载加密设备备份。备份与命令行恢复兼容。

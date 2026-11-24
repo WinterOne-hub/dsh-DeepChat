@@ -2,13 +2,13 @@
 
 DeepSeek Harness 加密聊天与材料分享插件 · Encrypted chat and file sharing for DeepSeek Harness
 
-[中文](#中文) · [English](#english) · [v0.1.1 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.1.1)
+[中文](#中文) · [English](#english) · [v0.1.2 下载 / Download](https://github.com/WinterOne-hub/dsh-DeepChat/releases/tag/v0.1.2)
 
 | 下载 / Download | 链接 / Link |
 | --- | --- |
-| 安装包 / Plugin package | [dsh-DeepChat-0.1.1.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.1/dsh-DeepChat-0.1.1.tgz) |
-| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.1/SHA256SUMS) |
-| 源码 / Source code | [v0.1.1 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.1.1.zip) |
+| 安装包 / Plugin package | [dsh-DeepChat-0.1.2.tgz](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.2/dsh-DeepChat-0.1.2.tgz) |
+| 校验文件 / Checksums | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-DeepChat/releases/download/v0.1.2/SHA256SUMS) |
+| 源码 / Source code | [v0.1.2 ZIP](https://github.com/WinterOne-hub/dsh-DeepChat/archive/refs/tags/v0.1.2.zip) |
 
 ## 中文
 
@@ -29,6 +29,8 @@ dsh-DeepChat 是 DeepSeek Harness 的第三方聊天插件。它在侧栏收发�
 使用 0.0.1，或需要单独运行中继时，在源码目录运行 `npm ci` 和 `node src/serve.js`，中继默认监听 `127.0.0.1:8611`。在插件的「投递设置」中填入地址，点击「保存并注册」。跨设备时，双方需要连接同一个私有 HTTPS 中继，并通过可信渠道交换邀请、核对设备指纹。
 
 聊天时可以分享一条已完成的 DSH 回复和一个文件，文件上限为 128 KiB。可以划选一段文字或勾选最多 10 条消息，再点「带到 DSH 新会话」。附件单独勾选，内容先进入草稿，用户点击发送后才交给所选模型服务。DeepSeek 账号的昵称和头像可导入本机显示，好友身份仍由设备指纹确认。
+
+在「分享材料」中直接选择本地文件并选填说明，预览后发送。选「DSH 回复和文件」可同时附带一条已完成的回复。文件上限仍为 128 KiB，旧版可接收。
 
 ### 搜索和引用回复
 
@@ -80,6 +82,8 @@ On 0.0.1, or to run a standalone relay, run `npm ci` and `node src/serve.js` fro
 
 You can share a completed DSH reply with one file of up to 128 KiB. Select text or up to 10 messages to open a new DSH draft. Attachments are optional. The selected model service receives the content when you send the draft. You can import a DeepSeek name and avatar for display on your device. Device fingerprints verify contacts.
 
+Choose **分享材料** (Share materials), select a local file, and optionally add a caption before previewing and sending. Choose **DSH 回复和文件** (DSH reply and file) to include a completed reply. The 128 KiB file limit still applies and older clients can receive the file.
+
 ### Search and quote replies
 
 Use **搜索聊天** (Search chat) above a conversation to find local text or attachment names. Each request checks 100 records; continue with **继续搜索更早记录** to scan older history. Open a result to see nearby messages, then choose **返回最新消息** to return. Search does not read attachment bodies or send keywords to the relay or model.
@@ -117,7 +121,7 @@ This release is intended for local use and private networks. Chat history stays 
 ```sh
 shasum -a 256 -c SHA256SUMS
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$PWD/dsh-DeepChat-0.1.1.tgz" --offline
+  plugin --profile desktop add "$PWD/dsh-DeepChat-0.1.2.tgz" --offline
 ```
 
 **DSH Web**

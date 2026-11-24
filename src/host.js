@@ -174,6 +174,12 @@ export function createHandler({ sessions, directory, deviceOptions = {}, pollMs 
         }
         case 'decide-friend': return json(await chat.mutate(device => device.decideFriend(body.id, body.decision, body.alias, body.fingerprint)))
         case 'send': return json(await chat.mutate(device => device.send(body.alias, body.text, body.replyTo)))
+        case 'send-file': {
+          if (typeof body.caption !== 'string') throw new Error('附件说明格式无效')
+          return json(await chat.mutate(device => device.sendBundle(body.alias, {
+            ...body, reply: body.caption.trim() || '分享了一个文件'
+          })))
+        }
         case 'send-bundle': return json(await chat.mutate(device => device.sendBundle(body.alias, body)))
         case 'mark-read': {
           const changed = await chat.mutate(device => device.markRead(body.alias, body.position), Boolean)

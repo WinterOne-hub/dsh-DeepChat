@@ -280,7 +280,7 @@ window.__ModuleLoader__.load({
         selecting && h('label', { className: 'message-select' }, h('input', { type: 'checkbox', checked: selected,
           disabled, onChange: () => toggle(item.id), 'aria-label': '选择这条消息' }), '选择'),
         item.file ? h('details', { className: 'material' }, h('summary', null,
-          h('strong', null, item.file.name), h('small', { className: 'muted' }, 'DSH 材料 · 回复和附件')),
+          h('strong', null, item.file.name), h('small', { className: 'muted' }, '附件')),
           h('div', { className: 'rows' }, body, button(`保存附件（${item.file.size} 字节）`, () => run(() => getFile(item)), disabled))) : body,
         h('div', { className: 'row spread' }, button('引用回复', () => quote(item), disabled),
           h('small', { className: 'message-meta' }, `${timeLabel(item.sentAt)} · ${statusLabels[item.status]}`)),
@@ -410,6 +410,8 @@ window.__ModuleLoader__.load({
     }
 
     function MaterialPanel({ alias, current, busy, close, run, maxFileBytes }) {
+      const [withReply, setWithReply] = useState(false)
+      const [caption, setCaption] = useState('')
       const [sessions, setSessions] = useState([])
       const [session, setSession] = useState('')
       const [replies, setReplies] = useState([])
@@ -433,34 +435,44 @@ window.__ModuleLoader__.load({
         setSessions(records)
         await loadReplies(records.some(row => row.id === preferred) ? preferred : records[0]?.id ?? '')
       }
-      useEffect(() => { void run(() => loadSources(current)) }, [])
-
       async function prepare() {
-        if (!selected || !file) throw new Error('请选择回复和附件')
+        if (!file || (withReply && !selected)) throw new Error('请选择要分享的内容')
         if (file.size > maxFileBytes) throw new Error('附件超过 128 KiB')
+        const description = withReply ? selected.text : caption.trim()
+        if (new TextEncoder().encode(description).length > 8192) throw new Error('附件说明超过 8192 字节，请缩短后再试')
         const bytes = new Uint8Array(await file.arrayBuffer())
         const sha256 = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
-        setSnapshot(Object.freeze({ submission: crypto.randomUUID().replaceAll('-', ''), alias, reply: selected.text, name: file.name,
-          size: bytes.length, data: encodeFile(bytes), sha256: Array.from(sha256, byte => byte.toString(16).padStart(2, '0')).join('') }))
+        const input = { submission: crypto.randomUUID().replaceAll('-', ''), alias, name: file.name,
+          size: bytes.length, data: encodeFile(bytes), sha256: Array.from(sha256, byte => byte.toString(16).padStart(2, '0')).join(''),
+          ...(withReply ? { reply: description } : { caption: description }) }
+        setSnapshot({ input, description, action: withReply ? 'send-bundle' : 'send-file' })
       }
 
       return h('section', { className: 'card', 'aria-label': '分享材料' },
         h('header', { className: 'row spread' }, h('h2', null, '分享材料'), button('关闭材料分享', close, busy)),
-        label('DSH 会话', h('select', { value: session, disabled: locked, onChange: event => {
+        label('分享方式', h('select', { value: withReply ? 'reply' : 'file', disabled: locked, onChange: event => {
+          const next = event.target.value === 'reply'
+          setWithReply(next)
+          if (next && !sessions.length) void run(() => loadSources(current))
+        } }, option('file', '本地文件'), option('reply', 'DSH 回复和文件'))),
+        withReply && label('DSH 会话', h('select', { value: session, disabled: locked, onChange: event => {
           const id = event.target.value
           void run(() => loadReplies(id))
         } }, option('', '选择会话'), sessions.map(row => option(row.id, row.title)))),
-        button('刷新会话', () => run(() => loadSources(session || current)), locked),
-        label('已完成的回复', h('select', { value: replyId, disabled: locked, onChange: event => setReplyId(event.target.value) },
+        withReply && button('刷新会话', () => run(() => loadSources(session || current)), locked),
+        withReply && label('已完成的回复', h('select', { value: replyId, disabled: locked, onChange: event => setReplyId(event.target.value) },
           option('', '选择回复'), replies.map(row => option(String(row.seq), row.text.slice(0, 88).replace(/\s+/g, ' '))))),
+        !withReply && label('文件说明（可选）', h('textarea', { rows: 2, value: caption, disabled: locked, maxLength: 8192,
+          onChange: event => setCaption(event.target.value) })),
         label('本地文件（最多 128 KiB）', h('input', { type: 'file', disabled: locked, onChange: event => setFile(event.target.files[0] ?? null) })),
-        !snapshot && button('预览材料包', () => run(prepare), !selected || !file || busy, true),
+        !snapshot && button('预览材料包', () => run(prepare), !file || (withReply && !selected) || busy, true),
         snapshot && h('section', { className: 'card', 'aria-label': '材料包预览' },
-          h('h2', null, '材料包预览'), h('p', null, `发送给 ${snapshot.alias}`), h('pre', { className: 'material-preview' }, snapshot.reply),
-          h('p', null, `${snapshot.name} · ${snapshot.size} 字节`), h('small', null, `SHA-256 ${snapshot.sha256}`),
+          h('h2', null, '材料包预览'), h('p', null, `发送给 ${snapshot.input.alias}`),
+          snapshot.description && h('pre', { className: 'material-preview' }, snapshot.description),
+          h('p', null, `${snapshot.input.name} · ${snapshot.input.size} 字节`), h('small', null, `SHA-256 ${snapshot.input.sha256}`),
           h('div', { className: 'row' }, button('返回编辑', () => setSnapshot(null), busy),
             button('确认发送', () => run(async () => {
-              const result = await api('send-bundle', { input: snapshot })
+              const result = await api(snapshot.action, { input: snapshot.input })
               close()
               return `材料包已保存 · ${statusLabels[result.status]}`
             }), busy, true))))
